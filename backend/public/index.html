@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice to Text Converter</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .container {
+            background: white;
+            padding: 2rem;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            max-width: 600px;
+            width: 90%;
+        }
+        
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 2rem;
+            font-size: 2rem;
+        }
+        
+        .upload-area {
+            border: 2px dashed #667eea;
+            border-radius: 10px;
+            padding: 2rem;
+            text-align: center;
+            margin-bottom: 1rem;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .upload-area:hover {
+            border-color: #764ba2;
+            background-color: #f8f9ff;
+        }
+        
+        .upload-area.dragover {
+            border-color: #764ba2;
+            background-color: #f0f2ff;
+        }
+        
+        .file-input {
+            display: none;
+        }
+        
+        .upload-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 1rem;
+            margin: 1rem;
+            transition: transform 0.2s ease;
+        }
+        
+        .upload-btn:hover {
+            transform: translateY(-2px);
+        }
+        
+        .upload-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .result-area {
+            margin-top: 2rem;
+            padding: 1rem;
+            background-color: #f8f9fa;
+            border-radius: 10px;
+            display: none;
+        }
+        
+        .result-text {
+            background: white;
+            padding: 1rem;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+            margin-top: 1rem;
+            white-space: pre-wrap;
+            line-height: 1.6;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 1rem 0;
+        }
+        
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .error {
+            color: #dc3545;
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        
+        .success {
+            color: #155724;
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        
+        .file-info {
+            font-size: 0.9rem;
+            color: #666;
+            margin-top: 0.5rem;
+        }
+        
+        .supported-formats {
+            text-align: center;
+            font-size: 0.85rem;
+            color: #888;
+            margin-top: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎤 Voice to Text Converter</h1>
+        
+        <div class="upload-area" id="uploadArea">
+            <div>
+                <h3>Drop your audio file here</h3>
+                <p>or click to select a file</p>
+                <input type="file" id="fileInput" class="file-input" accept="audio/*">
+                <button type="button" class="upload-btn" onclick="document.getElementById('fileInput').click()">
+                    Choose Audio File
+                </button>
+            </div>
+        </div>
+        
+        <div class="supported-formats">
+            Supported formats: MP3, WAV, OGG, MP4, M4A, WEBM, FLAC (Max: 10MB)
+        </div>
+        
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Converting audio to text...</p>
+        </div>
+        
+        <div class="result-area" id="resultArea">
+            <h3>Transcription Result:</h3>
+            <div class="result-text" id="resultText"></div>
+            <div class="file-info" id="fileInfo"></div>
+        </div>
+    </div>
+
+    <script>
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const loading = document.getElementById('loading');
+        const resultArea = document.getElementById('resultArea');
+        const resultText = document.getElementById('resultText');
+        const fileInfo = document.getElementById('fileInfo');
+        
+        // API base URL - change this to your server URL
+        const API_BASE_URL = 'http://localhost:3000/api';
+        
+        // Drag and drop functionality
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+        
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        });
+        
+        // File input change
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFile(e.target.files[0]);
+            }
+        });
+        
+        function showMessage(message, type = 'error') {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = type;
+            messageDiv.textContent = message;
+            
+            // Remove existing messages
+            const existingMessages = document.querySelectorAll('.error, .success');
+            existingMessages.forEach(msg => msg.remove());
+            
+            uploadArea.insertAdjacentElement('afterend', messageDiv);
+            
+            // Auto remove after 5 seconds
+            setTimeout(() => {
+                messageDiv.remove();
+            }, 5000);
+        }
+        
+        async function handleFile(file) {
+            // Validate file type
+            const allowedTypes = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/ogg', 'audio/mp4', 'audio/m4a', 'audio/webm', 'audio/flac'];
+            if (!allowedTypes.includes(file.type) && !file.name.match(/\.(mp3|wav|ogg|mp4|m4a|webm|flac)$/i)) {
+                showMessage('Please select a valid audio file (MP3, WAV, OGG, MP4, M4A, WEBM, FLAC)', 'error');
+                return;
+            }
+            
+            // Validate file size (10MB limit)
+            const maxSize = 10 * 1024 * 1024; // 10MB
+            if (file.size > maxSize) {
+                showMessage('File size must be less than 10MB', 'error');
+                return;
+            }
+            
+            // Show loading
+            loading.style.display = 'block';
+            resultArea.style.display = 'none';
+            
+            // Remove existing messages
+            const existingMessages = document.querySelectorAll('.error, .success');
+            existingMessages.forEach(msg => msg.remove());
+            
+            try {
+                const formData = new FormData();
+                formData.append('audio', file);
+                
+                const response = await fetch(`${API_BASE_URL}/file/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    // Show result
+                    resultText.textContent = result.data.text;
+                    fileInfo.innerHTML = `
+                        <strong>File:</strong> ${result.data.filename}<br>
+                        <strong>Size:</strong> ${(result.data.size / 1024).toFixed(2)} KB<br>
+                        <strong>Processed:</strong> ${new Date(result.timestamp).toLocaleString()}
+                    `;
+                    resultArea.style.display = 'block';
+                    showMessage('Audio successfully converted to text!', 'success');
+                } else {
+                    showMessage(result.message || 'Failed to convert audio to text', 'error');
+                }
+            } catch (error) {
+                console.error('Upload error:', error);
+                showMessage('Network error. Please make sure the server is running on port 3000.', 'error');
+            } finally {
+                loading.style.display = 'none';
+            }
+        }
+        
+        // Check API status on page load
+        async function checkApiStatus() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/file/health`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    console.log('API is running:', result.message);
+                } else {
+                    showMessage('API is not responding properly', 'error');
+                }
+            } catch (error) {
+                showMessage('Cannot connect to API. Please make sure the server is running on port 3000.', 'error');
+            }
+        }
+        
+        // Check API status when page loads
+        checkApiStatus();
+    </script>
+</body>
+</html>
